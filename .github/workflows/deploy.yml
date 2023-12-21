@@ -21,3 +21,35 @@ jobs:
         run: chmod +x ./gradlew
       - name: Build with Gradle
         run: ./gradlew clean build
+
+      # UTC가 기준이기 때문에 한국시간으로 맞추려면 +9시간 해야 한다
+      - name: Get current time
+        uses: 1466587594/get-current-time@v2
+        id: current-time # 해당 id에 현재시간을 담음
+        with:
+          format: YYYY-MM-DDTHH-mm-ss
+          utcOffset: "+09:00"
+  
+      - name: Show Current Time
+        run: echo "CurrentTime=${{steps.current-time.outputs.formattedTime}}" # 해당 id 출력
+        
+     # EB에 CD 하기 위해 추가 작성
+      - name: Generate deployment package
+        run: | # 명령어를 여러줄 적을 수 있음 # cp A B A를 B로 복사 # cd deploy && zip -r deploy.zip . : deploy로 이동해서 모든파일(.)을 압축해라
+          mkdir deploy
+          cp build/libs/*.jar deploy/application.jar 
+          cp Procfile deploy/Procfile
+          cp -r .ebextensions deploy/.ebextensions
+          cd deploy && zip -r deploy.zip .
+      - name: Deploy to EB
+        uses: einaregilsson/beanstalk-deploy@v21
+        with:
+          aws_access_key: ${{ secrets.AWS_ACCESS_KEY }} #환경변수
+          aws_secret_key: ${{ secrets.AWS_SECRET_KEY }} #환경변수
+          application_name: aws-v5-beanstalk # 엘리스틱 빈스톡 애플리케이션 이름!
+          environment_name: Aws-v5-beanstalk-env # 엘리스틱 빈스톡 환경 이름!
+          version_label: aws-v5-${{steps.current-time.outputs.formattedTime}} # 버전 시간
+          region: ap-northeast-2
+          deployment_package: deploy/deploy.zip # 이것을 업로드 및 배포하겠다. 
+          # 원래 엘라스틱빈스톡에서 jar파일 주면 application.jar, procfile, .ebextention/00-makeFiles.config 파일을 스스로 만듬, 이를 직접 만들어서 압축한 것
+          # procfile은 스크립트
